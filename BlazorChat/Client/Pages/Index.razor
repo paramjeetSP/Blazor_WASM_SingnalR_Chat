@@ -1,0 +1,92 @@
+﻿@page "/home"
+@page "/"
+@using System.Net.Http.Headers
+
+<MudOverlay LightBackground=true Visible="isVisible" Absolute="true">
+    <MudProgressCircular Color="Color.Secondary" Indeterminate="true" />
+</MudOverlay>
+
+<div>
+    <EditForm Model="@model" OnValidSubmit="(()=>OnValidSubmit(model))">
+        <DataAnnotationsValidator />
+        <MudGrid Justify="Justify.Center" Style="margin-top: 80px !important; ">
+            <MudItem xs="12" sm="5">
+                <MudCard Elevation="25">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h4" Align="Align.Center">Login</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+
+                    <MudCardContent>
+                        <MudTextField Label="Email" Class="mt-3" @bind-Value="model.Email" HelperText="Enter your Email" For="@(() => model.Email)" />
+                        <MudTextField Label="Password" HelperText="Enter your password" Class="mt-3" @bind-Value="model.Password" For="@(() => model.Password)" InputType="InputType.Password" />
+                    </MudCardContent>
+
+                    <MudCardActions>
+                        <MudButton ButtonType="ButtonType.Submit" EndIcon="@Icons.Material.Outlined.Login" Class="ml-auto" Color="Color.Primary" Variant="Variant.Outlined">
+                            Login
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+                <MudPaper Class="pa-4 mt-4 " Elevation="25">
+                    <MudText Align="Align.Center">
+                        Don't have an account <MudLink Href="/register" Typo="Typo.body2">click here</MudLink> to register.
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </EditForm>
+</div>
+
+
+@code {
+    LoginDTO model = new LoginDTO();
+    bool isVisible = false;
+
+    [CascadingParameter]
+    public Task<AuthenticationState> AuthStat { get; set; }
+
+    protected async override Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+
+        var state = await ((ApiAuthenticationStateProvider)_stateProvider).GetAuthenticationStateAsync();
+        var user = state.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo($"/chat");
+        }
+        else
+        {
+            await cookie.SetValue("authToken", "", -1);
+            ((ApiAuthenticationStateProvider)_stateProvider).MarkUserAsLoggedOut();
+            HttpClient.DefaultRequestHeaders.Authorization = null;
+        }
+    }
+
+    private async Task OnValidSubmit(LoginDTO context)
+    {
+        isVisible = true;
+        var response = await UserManager.Login(context);
+
+        if (response.Success && response.Data != null)
+        {
+            var loginResult = JsonConvert.DeserializeObject<LoginResponse>(response.Data.ToString());
+            cookie.SetValue("authToken", loginResult.Token, 1);
+
+            ((ApiAuthenticationStateProvider)_stateProvider).MarkUserAsAuthenticated(loginResult.Email);
+
+            HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", loginResult.Token);
+
+            NavigationManager.NavigateTo("/chat", true);
+        }
+        else
+        {
+            _snackBar.Add(response.Message, Severity.Error);
+        }
+        isVisible = false;
+    }
+
+}
